@@ -1,0 +1,18 @@
+{
+  "name": "保護猫DB v2",
+  "short_name": "保護猫DB",
+  "description": "保護猫の個体・医療・観察・譲渡情報を管理するPWA",
+  "lang": "ja",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#f5f5f0",
+  "theme_color": "#5f6f52",
+  "icons": [
+    {
+      "src": "./icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
