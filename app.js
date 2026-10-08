@@ -210,14 +210,33 @@
 
   function latest(arr) { return arr?.[0] || null; }
 
-  function renderDetail() {
+  async function loadDriveImageUrl(driveFileId) {
+    if (!driveFileId) return "";
+    state.driveImageUrls = state.driveImageUrls || {};
+    if (state.driveImageUrls[driveFileId]) return state.driveImageUrls[driveFileId];
+    const token = await ensureGoogleToken();
+    const response = await fetch(`https://www.googleapis.com/drive/v3/files/${encodeURIComponent(driveFileId)}?alt=media`, {
+      headers: {"Authorization": `Bearer ${token}`}
+    });
+    if (!response.ok) throw new Error(`写真取得失敗: ${await response.text()}`);
+    const blob = await response.blob();
+    const url = URL.createObjectURL(blob);
+    state.driveImageUrls[driveFileId] = url;
+    return url;
+  }
+
+  async function renderDetail() {
     const c = state.selectedCat;
     const vaccine = latest(c.vaccinations);
     const test = latest(c.virusTests);
     const surgery = latest(c.surgeries);
     const mainFile = c.files.find(f => f.is_main_photo) || c.files[0];
-    const img = mainFile?.file_url
-      ? `<img class="detail-photo" src="${esc(mainFile.file_url)}" alt="${esc(c.name)}の写真">`
+    let mainImageUrl = "";
+    if (mainFile?.drive_file_id) {
+      try { mainImageUrl = await loadDriveImageUrl(mainFile.drive_file_id); } catch (e) { console.warn(e); }
+    }
+    const img = mainImageUrl
+      ? `<img class="detail-photo" src="${esc(mainImageUrl)}" alt="${esc(c.name)}の写真">`
       : `<div class="detail-photo" aria-label="写真未登録" style="display:grid;place-items:center;font-size:64px">🐱</div>`;
 
     $("cat-detail").innerHTML = `
@@ -273,7 +292,7 @@
       <div class="drive-box">
         <p>v1ではGoogle Driveのファイル情報をDBに保存する設計です。Drive OAuth・アップロードUIは次フェーズで接続します。</p>
         <div class="file-grid">
-          ${c.files.map(f => f.file_url ? `<div class="file-card"><img src="${esc(f.file_url)}" alt="${esc(f.file_name)}"><small>${esc(f.file_name)}</small></div>` : "").join("")}
+          ${c.files.map(f => `<div class="file-card" data-drive-file-id="${esc(f.drive_file_id || "")}"><div class="photo-loading">📷</div><small>${esc(f.file_name)}</small></div>`).join("")}
         </div>
       </div>` : ""}
 
@@ -283,6 +302,17 @@
         <div class="key">死亡</div><div>${c.deaths.length ? `${esc(formatDate(c.deaths[0].death_date))} / ${esc(c.deaths[0].cause || "原因未登録")}` : "—"}</div>
       </div>
     `;
+    const photoCards = document.querySelectorAll("[data-drive-file-id]");
+    photoCards.forEach(async card => {
+      const id = card.dataset.driveFileId;
+      if (!id) return;
+      try {
+        const url = await loadDriveImageUrl(id);
+        const loading = card.querySelector(".photo-loading");
+        if (loading) loading.outerHTML = `<img src="${esc(url)}" alt="${esc(card.querySelector("small")?.textContent || "写真")}" style="width:100%;aspect-ratio:1;object-fit:cover;border-radius:10px">`;
+      } catch (e) { console.warn(e); }
+    });
+
     const dc = $("drive-controls");
     if (dc) {
       dc.classList.toggle("hidden", !canEdit());
@@ -539,17 +569,30 @@
     }
   }
 
-  function renderDriveFiles() {
+  async function renderDriveFiles() {
     const box = $("drive-files");
     if (!box || !state.selectedCat) return;
-    box.innerHTML = (state.selectedCat.files || []).map(f => `
-      <div class="file-card">
-        <a href="${esc(f.file_url)}" target="_blank" rel="noopener">
-          <div class="cat-thumb">📷</div>
-          <small>${esc(f.file_name)}</small>
-        </a>
+    const files = state.selectedCat.files || [];
+    if (!files.length) { box.innerHTML = '<div class="muted">写真はまだありません。</div>'; return; }
+    box.innerHTML = files.map(f => `
+      <div class="file-card" data-drive-file-id="${esc(f.drive_file_id || "")}">
+        <div class="photo-loading">📷</div>
+        <small>${esc(f.file_name)}</small>
       </div>
-    `).join("") || '<div class="muted">写真はまだありません。</div>';
+    `).join("");
+    box.querySelectorAll("[data-drive-file-id]").forEach(async card => {
+      const id = card.dataset.driveFileId;
+      if (!id) return;
+      try {
+        const url = await loadDriveImageUrl(id);
+        const loading = card.querySelector(".photo-loading");
+        if (loading) loading.outerHTML = `<img src="${esc(url)}" alt="${esc(card.querySelector("small")?.textContent || "写真")}" style="width:100%;aspect-ratio:1;object-fit:cover;border-radius:10px">`;
+      } catch (e) {
+        console.warn(e);
+        const loading = card.querySelector(".photo-loading");
+        if (loading) loading.textContent = "写真を表示できません";
+      }
+    });
   }
 
   // ---------------- 保健所提出用PDF ----------------
