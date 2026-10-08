@@ -477,9 +477,10 @@
       file, "\r\n",
       `--${boundary}--`
     ]);
-    const response = await driveApi("upload/drive/v3/files?uploadType=multipart&fields=id,name,mimeType,webViewLink", {
+    const token = await ensureGoogleToken();
+    const response = await fetch("https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name,mimeType,webViewLink,parents", {
       method:"POST",
-      headers:{"Content-Type": `multipart/related; boundary=${boundary}`},
+      headers:{"Authorization": `Bearer ${token}`, "Content-Type": `multipart/related; boundary=${boundary}`},
       body
     });
     if (!response.ok) throw new Error(`Driveアップロード失敗: ${await response.text()}`);

@@ -154,3 +154,6 @@ Supabase `cat_files` にはDriveのファイルID・フォルダID・閲覧URL�
 - Supabase RLSがDBのアクセス制御を行います。
 - `service_role` key、Google Client Secret、秘密鍵はPWAへ絶対に入れません。
 - Google Driveの個人情報・譲渡書類は、権限設定を確認して運用してください。
+
+## v4修正
+Google Driveのmultipart upload endpointを修正しました。v3で写真アップロード時に「failed to fetch」になる問題に対応しています。
