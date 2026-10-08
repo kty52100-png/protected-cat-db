@@ -214,12 +214,21 @@
     if (!driveFileId) return "";
     state.driveImageUrls = state.driveImageUrls || {};
     if (state.driveImageUrls[driveFileId]) return state.driveImageUrls[driveFileId];
+
     const token = await ensureGoogleToken();
     const response = await fetch(`https://www.googleapis.com/drive/v3/files/${encodeURIComponent(driveFileId)}?alt=media`, {
-      headers: {"Authorization": `Bearer ${token}`}
+      method: "GET",
+      headers: { "Authorization": `Bearer ${token}` },
+      cache: "no-store"
     });
-    if (!response.ok) throw new Error(`写真取得失敗: ${await response.text()}`);
+    if (!response.ok) {
+      const body = await response.text();
+      throw new Error(`写真取得失敗 (${response.status}): ${body.slice(0, 300)}`);
+    }
     const blob = await response.blob();
+    if (!blob.type.startsWith("image/")) {
+      throw new Error(`画像ではないデータが返りました: ${blob.type || "unknown"}`);
+    }
     const url = URL.createObjectURL(blob);
     state.driveImageUrls[driveFileId] = url;
     return url;
@@ -232,16 +241,18 @@
     const surgery = latest(c.surgeries);
     const mainFile = c.files.find(f => f.is_main_photo) || c.files[0];
     let mainImageUrl = "";
+    let mainImageError = "";
     if (mainFile?.drive_file_id) {
-      try { mainImageUrl = await loadDriveImageUrl(mainFile.drive_file_id); } catch (e) { console.warn(e); }
+      try { mainImageUrl = await loadDriveImageUrl(mainFile.drive_file_id); } catch (e) { console.warn(e); mainImageError = e.message || String(e); }
     }
     const img = mainImageUrl
       ? `<img class="detail-photo" src="${esc(mainImageUrl)}" alt="${esc(c.name)}の写真">`
       : `<div class="detail-photo" aria-label="写真未登録" style="display:grid;place-items:center;font-size:64px">🐱</div>`;
+    const mainImageStatus = mainImageError ? `<div class="photo-error">写真を表示できません：${esc(mainImageError)}<br><button type="button" id="retry-drive-photo" class="secondary">Drive再接続して再表示</button></div>` : "";
 
     $("cat-detail").innerHTML = `
       <div class="detail-grid">
-        <div>${img}</div>
+        <div>${img}${mainImageStatus}</div>
         <div>
           <h2>${esc(c.name || "名前未登録")} <span class="status">${esc(STATUS_LABEL[c.status])}</span></h2>
           <p class="muted">${esc(c.management_no)}</p>
@@ -318,6 +329,18 @@
       dc.classList.toggle("hidden", !canEdit());
       renderDriveFiles();
     }
+    const retryPhoto = $("retry-drive-photo");
+    if (retryPhoto) retryPhoto.addEventListener("click", async () => {
+      try {
+        state.googleToken = null;
+        sessionStorage.removeItem("catdb_google_drive_token");
+        if (state.googleTokenClient) state.googleTokenClient.requestAccessToken({ prompt: "consent" });
+        await new Promise(r => setTimeout(r, 500));
+        await openCat(state.selectedCat.id);
+      } catch (e) {
+        setDriveMessage(e.message || String(e), "error");
+      }
+    });
     const add = $("add-observation");
     if (add) add.addEventListener("click", openObservationForm);
   }
@@ -425,8 +448,32 @@
     }
   }
 
+  function loadStoredGoogleToken() {
+    try {
+      const raw = sessionStorage.getItem("catdb_google_drive_token");
+      if (!raw) return;
+      const saved = JSON.parse(raw);
+      if (saved?.access_token && saved?.expires_at && Date.now() < saved.expires_at - 30000) {
+        state.googleToken = saved.access_token;
+      } else {
+        sessionStorage.removeItem("catdb_google_drive_token");
+      }
+    } catch (_) {}
+  }
+
+  function storeGoogleToken(response) {
+    state.googleToken = response.access_token;
+    try {
+      sessionStorage.setItem("catdb_google_drive_token", JSON.stringify({
+        access_token: response.access_token,
+        expires_at: Date.now() + ((response.expires_in || 3600) * 1000)
+      }));
+    } catch (_) {}
+  }
+
   function initGoogleDrive() {
     if (!driveConfigured()) return;
+    loadStoredGoogleToken();
     if (!window.google?.accounts?.oauth2) {
       setTimeout(initGoogleDrive, 700);
       return;
@@ -439,11 +486,16 @@
           setDriveMessage(`Google接続エラー: ${response.error}`, "error");
           return;
         }
-        state.googleToken = response.access_token;
+        storeGoogleToken(response);
         setDriveMessage("Google Driveに接続しました。", "success");
-        $("google-connect-button").textContent = "Google Drive接続済み";
+        const btn = $("google-connect-button");
+        if (btn) btn.textContent = "Google Drive接続済み";
       }
     });
+    if (state.googleToken) {
+      const btn = $("google-connect-button");
+      if (btn) btn.textContent = "Google Drive接続済み";
+    }
   }
 
   function ensureGoogleToken() {
@@ -451,16 +503,23 @@
       if (state.googleToken) return resolve(state.googleToken);
       if (!state.googleTokenClient) {
         initGoogleDrive();
-        return reject(new Error("Google Client IDが未設定です。config.jsを設定してください。"));
+        return reject(new Error("Google Driveに接続してください。"));
       }
-      const oldCallback = state.googleTokenClient.callback;
-      state.googleTokenClient.callback = (response) => {
-        state.googleTokenClient.callback = oldCallback;
+
+      const client = state.googleTokenClient;
+      const original = client.callback;
+      client.callback = (response) => {
+        client.callback = original;
         if (response.error) return reject(new Error(response.error));
-        state.googleToken = response.access_token;
-        resolve(state.googleToken);
+        storeGoogleToken(response);
+        resolve(response.access_token);
       };
-      state.googleTokenClient.requestAccessToken({prompt:"consent"});
+      try {
+        client.requestAccessToken({ prompt: "" });
+      } catch (e) {
+        client.callback = original;
+        reject(e);
+      }
     });
   }
 

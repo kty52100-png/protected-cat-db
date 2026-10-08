@@ -156,3 +156,5 @@ main { width: min(1100px, 100%); margin: 0 auto; padding: 18px 14px 40px; }
   .health-form { max-width:none; }
   .health-actions { display:none !important; }
 }
+
+.photo-error{margin-top:10px;padding:10px;border:1px solid #d9a3a3;border-radius:10px;background:#fff7f7;font-size:13px}.photo-error button{margin-top:8px}.detail-photo{width:100%;max-width:420px;min-height:180px;object-fit:cover;border-radius:14px;display:block}
