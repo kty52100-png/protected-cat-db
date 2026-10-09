@@ -794,7 +794,11 @@
       initGoogleDrive();
       window.removeEventListener("afterprint", restoreApp);
     };
-    window.addEventListener("afterprint", restoreApp);
+    window.addEventListener("afterprint", restoreApp, { once: true });
+    // Let the browser commit the replacement DOM and its print CSS before
+    // taking the print snapshot (Chromium can otherwise capture the old app).
+    await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    if (document.fonts?.ready) await document.fonts.ready;
     window.print();
   }
 
