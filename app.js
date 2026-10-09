@@ -369,7 +369,7 @@
     $("cat-status").value = cat?.status || "protected";
     const death = cat?.deaths?.[0] || null;
     $("death-date").value = death?.death_date || cat?.death_date || today();
-    $("death-cause").value = death?.cause || cat?.death_cause || "";
+    $("death-cause").value = death?.cause || "";
     $("death-hospital").value = death?.veterinary_hospital || "";
     $("death-note").value = death?.note || "";
     $("death-fields").classList.toggle("hidden", $("cat-status").value !== "deceased");
