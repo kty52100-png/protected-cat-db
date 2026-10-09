@@ -696,15 +696,15 @@
 
   // ---------------- 保健所提出用PDF ----------------
 
-  function buildHealthForm(cat) {
+  function buildHealthForm(cat, photoUrl = "") {
     const vaccine = latest(cat.vaccinations);
     const test = latest(cat.virusTests);
     const surgery = latest(cat.surgeries);
     const main = cat.files.find(f => f.is_main_photo) || cat.files[0];
-    const photo = main?.file_url
-      ? `<img class="health-photo" src="${esc(main.file_url)}" alt="${esc(cat.name)}">`
-      : `<div class="health-photo" style="display:grid;place-items:center;font-size:42pt">🐱</div>`;
-    const observationText = (cat.observations || []).map(o => {
+    const photo = photoUrl
+      ? `<img class="record-photo" src="${esc(photoUrl)}" alt="${esc(cat.name || "保護猫")}の写真">`
+      : `<div class="record-photo record-photo-empty">写真未登録</div>`;
+    const observationText = (cat.observations || []).slice().reverse().map(o => {
       const parts = [
         formatDate(o.observation_date),
         o.condition ? `体調：${o.condition}` : "",
@@ -718,60 +718,76 @@
       ].filter(Boolean);
       return parts.join(" / ");
     }).join("\n");
-
+    const death = latest(cat.deaths);
+    const transfer = latest(cat.transfers);
+    const diary = [cat.rescue_details || "", observationText].filter(Boolean).join("\n\n");
     return `
-      <div class="health-form">
-        <div class="health-header">
-          <div>保護猫</div>
-          <div>管理番号</div>
-          <div>${esc(cat.management_no)}</div>
-        </div>
-        <div class="health-body">
-          <div class="health-left">
-            ${photo}
-            <div class="health-info-row"><div>名前</div><div>${esc(cat.name || "")}</div></div>
-            <div class="health-info-row"><div>性別</div><div>${esc(SEX_LABEL[cat.sex])}</div></div>
-            <div class="health-info-row"><div>保護日</div><div>${esc(formatDate(cat.rescued_date))}</div></div>
-            <div class="health-info-row"><div>品種等</div><div>${esc(cat.breed || "")}</div></div>
-            <div class="health-info-row"><div>保護時年齢・生まれ（推定）</div><div>${esc(cat.estimated_age_text || formatDate(cat.estimated_birth_date))}</div></div>
-            <div class="health-info-row"><div>ワクチン</div><div>${vaccine ? `${esc(vaccine.vaccine_type)}　${esc(formatDate(vaccine.vaccination_date))}` : ""}</div></div>
-            <div class="health-info-row"><div>不妊去勢手術日</div><div>${surgery ? esc(formatDate(surgery.surgery_date)) : ""}</div></div>
-            <div class="health-info-row"><div>ウイルス検査日</div><div>${test ? esc(formatDate(test.test_date)) : ""}</div></div>
-            <div class="health-info-row"><div>FIV</div><div>${test ? esc(TEST_LABEL[test.fiv_result]) : ""}</div></div>
-            <div class="health-info-row"><div>FeLV</div><div>${test ? esc(TEST_LABEL[test.felv_result]) : ""}</div></div>
-            <div class="health-observation-title">保護した時の状況・体調など　観察日記</div>
-            <div class="health-observation">${esc(cat.rescue_details || "")}${observationText ? "\n\n" + esc(observationText) : ""}</div>
-            <div class="health-footer">（死亡した場合は死亡日、原因） ${cat.deaths?.[0] ? `${esc(formatDate(cat.deaths[0].death_date))}　${esc(cat.deaths[0].cause || "")}` : ""}</div>
-          </div>
-          <div class="health-right">
-            <div class="health-right-title">譲渡日　譲渡先</div>
-            <div class="health-transfer-lines">
-              ${cat.transfers?.[0] ? `<div style="padding:3mm">譲渡日：${esc(formatDate(cat.transfers[0].transfer_date))}<br>譲渡先：${esc(cat.transfers[0].recipient_name || "")}</div>` : ""}
+      <section class="individual-record">
+        <div class="record-left">
+          <div class="record-profile">
+            <div class="record-photo-wrap">${photo}</div>
+            <div class="record-facts">
+              <div class="record-title-row"><strong>保護猫</strong><span>管理番号</span><b>${esc(cat.management_no || "")}</b></div>
+              <div class="record-field"><b>名前</b><span>${esc(cat.name || "")}</span></div>
+              <div class="record-field"><b>性別</b><span>${esc(SEX_LABEL[cat.sex] || "不明")}</span></div>
+              <div class="record-field"><b>保護日</b><span>${esc(formatDate(cat.rescued_date))}</span></div>
+              <div class="record-field"><b>品種等</b><span>${esc(cat.breed || "")}</span></div>
+              <div class="record-field"><b>保護時年齢・生まれ（推定）</b><span>${esc(cat.estimated_age_text || formatDate(cat.estimated_birth_date) || "")}</span></div>
+              <div class="record-field"><b>ワクチン</b><span>${vaccine ? `${esc(vaccine.vaccine_type || "接種済")} ${esc(formatDate(vaccine.vaccination_date))}` : ""}</span></div>
+              <div class="record-field"><b>不妊去勢手術日</b><span>${surgery ? esc(formatDate(surgery.surgery_date)) : ""}</span></div>
+              <div class="record-field"><b>ウイルス検査日</b><span>${test ? esc(formatDate(test.test_date)) : ""}</span></div>
+              <div class="record-field"><b>FIV</b><span>${test ? esc(TEST_LABEL[test.fiv_result] || "") : ""}</span></div>
+              <div class="record-field"><b>FeLV</b><span>${test ? esc(TEST_LABEL[test.felv_result] || "") : ""}</span></div>
             </div>
           </div>
+          <div class="record-diary-title">保護した時の状況・体調など　観察日記</div>
+          <div class="record-diary">${esc(diary)}</div>
+          <div class="record-death">（死亡した場合は死亡日、原因） ${death ? `${esc(formatDate(death.death_date))}　${esc(death.cause || "")}${death.veterinary_hospital ? `　病院：${esc(death.veterinary_hospital)}` : ""}${death.note ? `　${esc(death.note)}` : ""}` : ""}</div>
         </div>
-        <div style="font-size:9pt;padding-top:2mm">管理番号：${esc(cat.management_no)}</div>
-      </div>
+        <div class="record-right">
+          <div class="record-adoption">
+            <div class="record-adoption-title">譲渡日　　　　　　　　　　　譲渡先</div>
+            <div class="record-adoption-content">
+              <div><b>譲渡日</b><span>${transfer ? esc(formatDate(transfer.transfer_date)) : ""}</span></div>
+              <div><b>譲渡先</b><span>${transfer ? esc(transfer.recipient_name || "") : ""}</span></div>
+            </div>
+          </div>
+          <div class="record-continuation-title">観察日記の続き（左下から続けて記入）</div>
+          <div class="record-continuation"></div>
+          <div class="record-bottom-number">管理番号：${esc(cat.management_no || "")}</div>
+        </div>
+      </section>
     `;
   }
 
-  function printHealthForm() {
+  async function printHealthForm() {
     if (!state.selectedCat) return;
     const oldTitle = document.title;
     const oldBody = document.body.innerHTML;
-    const form = buildHealthForm(state.selectedCat);
-    document.title = `保護猫_${state.selectedCat.management_no}_${state.selectedCat.name || ""}`;
-    document.body.innerHTML = `<div class="health-actions"><button onclick="window.location.reload()">戻る</button></div>${form}`;
+    const cat = state.selectedCat;
+    const main = cat.files.find(f => f.is_main_photo) || cat.files[0];
+    let photoUrl = "";
+    if (main?.drive_file_id) {
+      try { photoUrl = await loadDriveImageUrl(main.drive_file_id); }
+      catch (e) { console.warn("帳票写真を読み込めませんでした", e); }
+    } else if (main?.file_url) {
+      photoUrl = main.file_url;
+    }
+    const form = buildHealthForm(cat, photoUrl);
+    document.title = `保護猫_${cat.management_no}_${cat.name || ""}`;
+    document.body.innerHTML = `<div class="health-actions"><button type="button" onclick="window.location.reload()">戻る</button><span>印刷画面で「PDFに保存」を選べます。</span></div>${form}`;
+    // Wait for the photo (if any) to finish loading before opening the print dialog.
+    const img = document.querySelector(".record-photo[src]");
+    if (img && !img.complete) await new Promise(resolve => { img.onload = resolve; img.onerror = resolve; });
     window.print();
     setTimeout(() => {
       document.body.innerHTML = oldBody;
       document.title = oldTitle;
-      // Rebind all events after restoring body.
       setupEvents();
       renderDetail();
       panel("detail-panel");
       initGoogleDrive();
-    }, 500);
+    }, 700);
   }
 
   function setupEvents() {
