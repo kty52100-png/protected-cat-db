@@ -129,7 +129,6 @@ main { width: min(1100px, 100%); margin: 0 auto; padding: 18px 14px 40px; }
   .detail-grid { grid-template-columns:180px 1fr; }
   .section-title { break-after:avoid; }
   .timeline-item { break-inside:avoid; }
-  @page { size:A4; margin:12mm; }
 }
 
 

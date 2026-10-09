@@ -779,15 +779,23 @@
     // Wait for the photo (if any) to finish loading before opening the print dialog.
     const img = document.querySelector(".record-photo[src]");
     if (img && !img.complete) await new Promise(resolve => { img.onload = resolve; img.onerror = resolve; });
-    window.print();
-    setTimeout(() => {
+    // Restore the application only after the browser has fully closed print preview.
+    // A short timeout can fire while the user is changing paper size, causing the
+    // normal PWA screen to replace the print layout inside the preview.
+    let restored = false;
+    const restoreApp = () => {
+      if (restored) return;
+      restored = true;
       document.body.innerHTML = oldBody;
       document.title = oldTitle;
       setupEvents();
       renderDetail();
       panel("detail-panel");
       initGoogleDrive();
-    }, 700);
+      window.removeEventListener("afterprint", restoreApp);
+    };
+    window.addEventListener("afterprint", restoreApp);
+    window.print();
   }
 
   function setupEvents() {
