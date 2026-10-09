@@ -123,6 +123,15 @@
     if (error) throw error;
     if (!data.active) throw new Error("このアカウントは無効になっています。");
     state.profile = data;
+    updateRoleControls();
+  }
+
+  function updateRoleControls() {
+    const editable = canEdit();
+    const newCatButton = $("new-cat-button");
+    const editCatButton = $("edit-cat-button");
+    if (newCatButton) newCatButton.classList.toggle("hidden", !editable);
+    if (editCatButton) editCatButton.classList.toggle("hidden", !editable);
   }
 
   function canEdit() {
@@ -205,6 +214,7 @@
       files: files.data || []
     };
     renderDetail();
+    updateRoleControls();
     panel("detail-panel");
   }
 
@@ -764,7 +774,7 @@
       await loadCats();
     });
 
-    $("new-cat-button").addEventListener("click", () => openCatForm());
+    $("new-cat-button").addEventListener("click", () => { if (canEdit()) openCatForm(); });
     $("refresh-button").addEventListener("click", () => loadCats().catch(err => toast(err.message)));
     $("logout-button").addEventListener("click", async () => {
       await state.supabase.auth.signOut();
@@ -774,7 +784,7 @@
     $("search-input").addEventListener("input", renderCatList);
     $("status-filter").addEventListener("change", renderCatList);
     $("back-button").addEventListener("click", () => panel("list-panel"));
-    $("edit-cat-button").addEventListener("click", () => openCatForm(state.selectedCat));
+    $("edit-cat-button").addEventListener("click", () => { if (canEdit()) openCatForm(state.selectedCat); });
     $("cancel-cat-button").addEventListener("click", () => panel("detail-panel"));
     $("cancel-cat-button-2").addEventListener("click", () => panel("detail-panel"));
     $("cat-form").addEventListener("submit", saveCat);
