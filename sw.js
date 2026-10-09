@@ -1,4 +1,4 @@
-const CACHE = "protected-cat-db-v1";
+const CACHE = "protected-cat-db-v7";
 const CORE = [
   "./",
   "./index.html",
