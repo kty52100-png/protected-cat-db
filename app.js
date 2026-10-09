@@ -367,6 +367,12 @@
     $("estimated-birth-date").value = cat?.estimated_birth_date || "";
     $("estimated-age").value = cat?.estimated_age_text || "";
     $("cat-status").value = cat?.status || "protected";
+    const death = cat?.deaths?.[0] || null;
+    $("death-date").value = death?.death_date || cat?.death_date || today();
+    $("death-cause").value = death?.cause || cat?.death_cause || "";
+    $("death-hospital").value = death?.veterinary_hospital || "";
+    $("death-note").value = death?.note || "";
+    $("death-fields").classList.toggle("hidden", $("cat-status").value !== "deceased");
     $("neuter-status").value = cat?.neuter_status || "unknown";
     $("rescue-location").value = cat?.rescue_location || "";
     $("rescue-details").value = cat?.rescue_details || "";
@@ -380,6 +386,13 @@
     if (!canEdit()) return message("cat-form-message","閲覧権限では編集できません。","error");
 
     const id = $("cat-id").value || null;
+    const desiredStatus = $("cat-status").value;
+    if (desiredStatus === "deceased" && !id) {
+      return message("cat-form-message", "先に猫を「保護中」などで登録してから、編集画面で死亡記録を登録してください。", "error");
+    }
+    if (id && state.selectedCat?.status === "deceased" && desiredStatus !== "deceased") {
+      return message("cat-form-message", "死亡記録がある猫の状態変更は、記録の整合性を保つため現在この画面ではできません。管理者に相談してください。", "error");
+    }
     const payload = {
       management_no: $("management-no").value.trim() || null,
       name: $("cat-name").value.trim(),
@@ -388,7 +401,7 @@
       rescued_date: $("rescued-date").value || null,
       estimated_birth_date: $("estimated-birth-date").value || null,
       estimated_age_text: $("estimated-age").value.trim(),
-      status: $("cat-status").value,
+      status: desiredStatus === "deceased" ? "deceased" : desiredStatus,
       neuter_status: $("neuter-status").value,
       rescue_location: $("rescue-location").value.trim(),
       rescue_details: $("rescue-details").value.trim(),
@@ -399,7 +412,24 @@
     if (!payload.name) return message("cat-form-message","名前を入力してください。","error");
 
     let result;
-    if (id) {
+    if (id && desiredStatus === "deceased") {
+      const deathDate = $("death-date").value;
+      if (!deathDate) return message("cat-form-message", "死亡日を入力してください。", "error");
+      // 先に通常項目だけ保存。死亡処理が失敗しても、状態だけ死亡に変わらないようにする。
+      const remaining = { ...payload };
+      remaining.status = state.selectedCat?.status || "protected";
+      const catSave = await state.supabase.from("cats").update(remaining).eq("id", id).select().single();
+      if (catSave.error) return message("cat-form-message", catSave.error.message, "error");
+      result = await state.supabase.rpc("record_cat_death", {
+        p_cat_id: id,
+        p_death_date: deathDate,
+        p_cause: $("death-cause").value.trim(),
+        p_veterinary_hospital: $("death-hospital").value.trim(),
+        p_note: $("death-note").value.trim()
+      });
+      if (result.error) return message("cat-form-message", "猫の基本情報は保存しましたが、死亡記録の保存に失敗しました：" + result.error.message, "error");
+      result = catSave;
+    } else if (id) {
       result = await state.supabase.from("cats").update(payload).eq("id", id).select().single();
     } else {
       payload.created_by = state.user.id;
@@ -788,6 +818,11 @@
     $("cancel-cat-button").addEventListener("click", () => panel("detail-panel"));
     $("cancel-cat-button-2").addEventListener("click", () => panel("detail-panel"));
     $("cat-form").addEventListener("submit", saveCat);
+    $("cat-status").addEventListener("change", () => {
+      const isDeceased = $("cat-status").value === "deceased";
+      $("death-fields").classList.toggle("hidden", !isDeceased);
+      if (isDeceased && !$("death-date").value) $("death-date").value = today();
+    });
     $("back-to-detail-button").addEventListener("click", () => panel("detail-panel"));
     $("cancel-observation-button").addEventListener("click", () => panel("detail-panel"));
     $("observation-form").addEventListener("submit", saveObservation);
