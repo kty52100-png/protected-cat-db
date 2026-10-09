@@ -762,44 +762,41 @@
 
   async function printHealthForm() {
     if (!state.selectedCat) return;
-    const oldTitle = document.title;
-    const oldBody = document.body.innerHTML;
     const cat = state.selectedCat;
-    const main = cat.files.find(f => f.is_main_photo) || cat.files[0];
+    // Open the print window immediately from the click gesture. Keep the live PWA
+    // DOM untouched so Chromium cannot fall back to printing the normal screen.
+    const printWindow = window.open("about:blank", "_blank");
+    if (!printWindow) {
+      alert("印刷用ウィンドウが開けませんでした。ブラウザでポップアップを許可して、もう一度お試しください。");
+      return;
+    }
+    printWindow.document.open();
+    printWindow.document.write(`<!doctype html><html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>個体情報記録票</title><link rel="stylesheet" href="${new URL("styles.css", location.href).href}"><style>html,body{margin:0;padding:0;background:#fff!important}body{width:100%;-webkit-print-color-adjust:exact;print-color-adjust:exact}.health-actions{display:none!important}@page{size:A4 landscape;margin:8mm}@media print{html,body{width:281mm!important;height:194mm!important;margin:0!important;padding:0!important}.individual-record{width:281mm!important;height:194mm!important;margin:0!important;break-inside:avoid;page-break-inside:avoid}}</style></head><body><p style="font:14px sans-serif;padding:16px">帳票を準備しています…</p></body></html>`);
+    printWindow.document.close();
+
     let photoUrl = "";
+    const main = cat.files.find(f => f.is_main_photo) || cat.files[0];
     if (main?.drive_file_id) {
       try { photoUrl = await loadDriveImageUrl(main.drive_file_id); }
       catch (e) { console.warn("帳票写真を読み込めませんでした", e); }
     } else if (main?.file_url) {
       photoUrl = main.file_url;
     }
+
     const form = buildHealthForm(cat, photoUrl);
-    document.title = `保護猫_${cat.management_no}_${cat.name || ""}`;
-    document.body.innerHTML = `<div class="health-actions"><button type="button" onclick="window.location.reload()">戻る</button><span>印刷画面で「PDFに保存」を選べます。</span></div>${form}`;
-    // Wait for the photo (if any) to finish loading before opening the print dialog.
-    const img = document.querySelector(".record-photo[src]");
-    if (img && !img.complete) await new Promise(resolve => { img.onload = resolve; img.onerror = resolve; });
-    // Restore the application only after the browser has fully closed print preview.
-    // A short timeout can fire while the user is changing paper size, causing the
-    // normal PWA screen to replace the print layout inside the preview.
-    let restored = false;
-    const restoreApp = () => {
-      if (restored) return;
-      restored = true;
-      document.body.innerHTML = oldBody;
-      document.title = oldTitle;
-      setupEvents();
-      renderDetail();
-      panel("detail-panel");
-      initGoogleDrive();
-      window.removeEventListener("afterprint", restoreApp);
-    };
-    window.addEventListener("afterprint", restoreApp, { once: true });
-    // Let the browser commit the replacement DOM and its print CSS before
-    // taking the print snapshot (Chromium can otherwise capture the old app).
-    await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
-    if (document.fonts?.ready) await document.fonts.ready;
-    window.print();
+    printWindow.document.body.innerHTML = form;
+    const img = printWindow.document.querySelector(".record-photo[src]");
+    if (img && !img.complete) {
+      await new Promise(resolve => { img.onload = resolve; img.onerror = resolve; });
+    }
+    // Wait for the stylesheet and layout to settle before printing.
+    await new Promise(resolve => {
+      if (printWindow.document.readyState === "complete") resolve();
+      else printWindow.addEventListener("load", resolve, { once: true });
+    });
+    await new Promise(resolve => printWindow.requestAnimationFrame(() => printWindow.requestAnimationFrame(resolve)));
+    printWindow.focus();
+    printWindow.print();
   }
 
   function setupEvents() {
